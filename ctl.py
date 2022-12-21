@@ -15,7 +15,7 @@ class PillowDevice(object):
         rate = 115200,
     ):
         self.serial = serial.Serial(port,rate)
-        self.current_position = "right"
+        self.current_position = "center"
         self.pos2step = {
             "left": 4800,
             "right": 0,
@@ -34,9 +34,10 @@ class PillowDevice(object):
         self.send_command(
             step = step,
         )
+        self.current_position = position
     
     def send_command(self,step):
-        command = f"c {step}" if step > 0 else f"c {-step}"
+        command = f"c {step}"
         self.serial.write(command.encode())
     
     def lift_up(self):
@@ -119,11 +120,25 @@ def main():
             )
 
             target_frame = np.where((contour_frame == 255) & (line_frame == 255), 255, 0)
-            cv2.imshow("target_frame",target_frame.astype(np.uint8))
+            contours, hierarchy = cv2.findContours(
+                target_frame.astype(np.uint8),
+                cv2.RETR_EXTERNAL, 
+                cv2.CHAIN_APPROX_SIMPLE
+            )
+            contours = sorted(contours,key = lambda contour: -cv2.contourArea(contour))
+            output_area = np.zeros_like(subtracted_frame)
+            cv2.drawContours(
+                output_area,
+                contours[:2],
+                -1,
+                255,
+                -1
+            )
+            cv2.imshow("output_area",output_area.astype(np.uint8))
 
             if np.any(target_frame == 255):
                 #重心の算出
-                M = cv2.moments(target_frame.astype(np.uint8))
+                M = cv2.moments(output_area.astype(np.uint8))
                 if M["m00"] != 0:
                     x,y= int(M["m10"]/M["m00"]) , int(M["m01"]/M["m00"])
                     cv2.circle(frame, (x,y), 10, 255, -1)
@@ -137,11 +152,11 @@ def main():
                     projection_ratio_buff = np.append(projection_ratio_buff,projection_ratio)[1:] 
 
                     position = "uncear"
-                    if np.all(projection_ratio_buff >= 0.65):
+                    if np.all(projection_ratio_buff >= 0.67):
                         position = "left"
-                    elif np.all(projection_ratio_buff <= 0.3):
+                    elif np.all(projection_ratio_buff <= 0.32):
                         position = "right"
-                    elif np.all(projection_ratio_buff > 0.3) and np.all(projection_ratio_buff < 0.65):
+                    elif np.all(projection_ratio_buff > 0.32) and np.all(projection_ratio_buff < 0.67):
                         position = "center"
                     
 
@@ -155,14 +170,6 @@ def main():
         cv2.imshow('frame',frame)
     cv2.destroyAllWindows()
 
-
-
-
-                 
-        
-
-
-    
 
 
 if __name__ == "__main__":
